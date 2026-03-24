@@ -9,6 +9,9 @@ inputs:
     description: 'Go version to use for running tests'
     required: false
     default: 'stable'
+  fixtures-path:
+    description: 'Optional path to a JSON fixtures file for semantic detect/transcript checks'
+    required: false
 
 runs:
   using: 'composite'
@@ -29,4 +32,8 @@ runs:
           echo "::error::Binary not found or not executable: ${BINARY}"
           exit 1
         fi
-        AGENT_BINARY="${BINARY}" go test -v -count=1 -timeout=5m ./...
+        FIXTURES="${{ inputs.fixtures-path }}"
+        if [[ -n "$FIXTURES" && ! "$FIXTURES" = /* ]]; then
+          FIXTURES="${GITHUB_WORKSPACE}/${FIXTURES}"
+        fi
+        AGENT_BINARY="${BINARY}" AGENT_FIXTURES="${FIXTURES}" go test -v -count=1 -timeout=5m ./...

@@ -3,6 +3,7 @@ package compliancetest
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -192,8 +193,26 @@ func TestWriteAndReadSession(t *testing.T) {
 	if readBack.SessionID != sessionID {
 		t.Errorf("session_id: got %q, want %q", readBack.SessionID, sessionID)
 	}
-	if readBack.AgentName == "" {
-		t.Error("agent_name must not be empty on read-back")
+	if readBack.AgentName != session.AgentName {
+		t.Errorf("agent_name: got %q, want %q", readBack.AgentName, session.AgentName)
+	}
+	if readBack.RepoPath != session.RepoPath {
+		t.Errorf("repo_path: got %q, want %q", readBack.RepoPath, session.RepoPath)
+	}
+	if readBack.SessionRef != session.SessionRef {
+		t.Errorf("session_ref: got %q, want %q", readBack.SessionRef, session.SessionRef)
+	}
+	if string(readBack.NativeData) != string(session.NativeData) {
+		t.Errorf("native_data: got %q, want %q", readBack.NativeData, session.NativeData)
+	}
+	if !slices.Equal(readBack.ModifiedFiles, session.ModifiedFiles) {
+		t.Errorf("modified_files: got %v, want %v", readBack.ModifiedFiles, session.ModifiedFiles)
+	}
+	if !slices.Equal(readBack.NewFiles, session.NewFiles) {
+		t.Errorf("new_files: got %v, want %v", readBack.NewFiles, session.NewFiles)
+	}
+	if !slices.Equal(readBack.DeletedFiles, session.DeletedFiles) {
+		t.Errorf("deleted_files: got %v, want %v", readBack.DeletedFiles, session.DeletedFiles)
 	}
 }
 
@@ -216,6 +235,36 @@ func TestReadTranscript(t *testing.T) {
 	if len(res.Stdout) == 0 {
 		t.Error("read-transcript succeeded but returned empty output")
 	}
+}
+
+func TestGetSessionID_InvalidJSONFails(t *testing.T) {
+	r := newTestRunner(t)
+	res := r.Run(testCtx(t), []byte(`{"session_id":`), "get-session-id")
+	requireFailure(t, res)
+}
+
+func TestReadSession_InvalidJSONFails(t *testing.T) {
+	r := newTestRunner(t)
+	res := r.Run(testCtx(t), []byte(`{"session_id":`), "read-session")
+	requireFailure(t, res)
+}
+
+func TestWriteSession_InvalidJSONFails(t *testing.T) {
+	r := newTestRunner(t)
+	res := r.Run(testCtx(t), []byte(`{"session_id":`), "write-session")
+	requireFailure(t, res)
+}
+
+func TestChunkTranscript_InvalidMaxSizeFails(t *testing.T) {
+	r := newTestRunner(t)
+	res := r.Run(testCtx(t), []byte("test"), "chunk-transcript", "--max-size", "0")
+	requireFailure(t, res)
+}
+
+func TestReassembleTranscript_InvalidJSONFails(t *testing.T) {
+	r := newTestRunner(t)
+	res := r.Run(testCtx(t), []byte(`{"chunks":`), "reassemble-transcript")
+	requireFailure(t, res)
 }
 
 func TestUnknownSubcommand(t *testing.T) {

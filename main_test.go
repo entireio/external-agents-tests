@@ -5,14 +5,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
 
 var (
-	binaryPath string
-	agentInfo  *InfoResponse
+	binaryPath         string
+	agentInfo          *InfoResponse
+	complianceFixtures *ComplianceFixtures
 )
+
+type ComplianceFixtures struct {
+	Detect             *DetectFixtures            `json:"detect,omitempty"`
+	TranscriptAnalyzer *TranscriptAnalyzerFixture `json:"transcript_analyzer,omitempty"`
+}
+
+type DetectFixtures struct {
+	PresentRepo string `json:"present_repo,omitempty"`
+	AbsentRepo  string `json:"absent_repo,omitempty"`
+}
+
+type TranscriptAnalyzerFixture struct {
+	SessionRef     string   `json:"session_ref"`
+	Offset         int      `json:"offset,omitempty"`
+	Position       *int     `json:"position,omitempty"`
+	ModifiedFiles  []string `json:"modified_files,omitempty"`
+	Prompts        []string `json:"prompts,omitempty"`
+	Summary        string   `json:"summary,omitempty"`
+	HasSummary     *bool    `json:"has_summary,omitempty"`
+	MissingSession string   `json:"missing_session,omitempty"`
+}
 
 func TestMain(m *testing.M) {
 	binaryPath = os.Getenv("AGENT_BINARY")
@@ -31,8 +54,41 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	if fixturesPath := os.Getenv("AGENT_FIXTURES"); fixturesPath != "" {
+		path, err := resolveFixturePath(fixturesPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "resolve AGENT_FIXTURES: %v\n", err)
+			os.Exit(1)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "read fixtures file %s: %v\n", path, err)
+			os.Exit(1)
+		}
+		var parsed ComplianceFixtures
+		if err := json.Unmarshal(data, &parsed); err != nil {
+			fmt.Fprintf(os.Stderr, "parse fixtures file %s: %v\n", path, err)
+			os.Exit(1)
+		}
+		complianceFixtures = &parsed
+	}
+
 	// Fetch agent info to discover capabilities.
-	r := NewRunner(binaryPath, os.TempDir())
+	infoRepoRoot, err := os.MkdirTemp("", "external-agent-info-repo-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create info repo root: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(infoRepoRoot)
+
+	infoEnvRoot, err := os.MkdirTemp("", "external-agent-info-env-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "create info env root: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(infoEnvRoot)
+
+	r := NewRunnerWithEnvRoot(binaryPath, infoRepoRoot, infoEnvRoot)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	res := r.Run(ctx, nil, "info")
 	cancel()
@@ -75,7 +131,7 @@ func testCtx(t *testing.T) context.Context {
 
 func newTestRunner(t *testing.T) *Runner {
 	t.Helper()
-	return NewRunner(binaryPath, t.TempDir())
+	return NewRunnerWithEnvRoot(binaryPath, t.TempDir(), t.TempDir())
 }
 
 func requireSuccess(t *testing.T, res *Result) {
@@ -134,4 +190,15 @@ func hookInputWithPrompt(hookType, sessionID, prompt string) HookInputJSON {
 	h := hookInput(hookType, sessionID)
 	h.UserPrompt = prompt
 	return h
+}
+
+func resolveFixturePath(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(wd, path), nil
 }

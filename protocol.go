@@ -23,6 +23,7 @@ type Capabilities struct {
 	TextGenerator          bool `json:"text_generator"`
 	HookResponseWriter     bool `json:"hook_response_writer"`
 	SubagentAwareExtractor bool `json:"subagent_aware_extractor"`
+	UsesTerminal           bool `json:"uses_terminal"`
 }
 
 // DetectResponse is the output of the "detect" subcommand.
@@ -116,6 +117,21 @@ type ExtractPromptsResponse struct {
 type ExtractSummaryResponse struct {
 	Summary    string `json:"summary"`
 	HasSummary bool   `json:"has_summary"`
+}
+
+// TokenUsageResponse is the output of token calculation subcommands.
+type TokenUsageResponse struct {
+	InputTokens         int                 `json:"input_tokens"`
+	CacheCreationTokens int                 `json:"cache_creation_tokens"`
+	CacheReadTokens     int                 `json:"cache_read_tokens"`
+	OutputTokens        int                 `json:"output_tokens"`
+	APICallCount        int                 `json:"api_call_count"`
+	SubagentTokens      *TokenUsageResponse `json:"subagent_tokens,omitempty"`
+}
+
+// GenerateTextResponse is the output of "generate-text".
+type GenerateTextResponse struct {
+	Text string `json:"text"`
 }
 
 // HookInputJSON is the standard input format for hook-related subcommands.
