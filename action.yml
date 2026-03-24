@@ -1,0 +1,32 @@
+name: 'Entire External Agent Protocol Tests'
+description: 'Validates protocol compliance of an Entire CLI external agent binary'
+
+inputs:
+  binary-path:
+    description: 'Path to the pre-built external agent binary (entire-agent-<name>)'
+    required: true
+  go-version:
+    description: 'Go version to use for running tests'
+    required: false
+    default: 'stable'
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false
+    - name: Run protocol compliance tests
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        BINARY="${{ inputs.binary-path }}"
+        if [[ ! "$BINARY" = /* ]]; then
+          BINARY="${GITHUB_WORKSPACE}/${BINARY}"
+        fi
+        if [[ ! -x "$BINARY" ]]; then
+          echo "::error::Binary not found or not executable: ${BINARY}"
+          exit 1
+        fi
+        AGENT_BINARY="${BINARY}" go test -v -count=1 -timeout=5m ./...
