@@ -1,4 +1,4 @@
-package compliancetest
+package protocol
 
 import "encoding/json"
 
@@ -121,11 +121,11 @@ type ExtractSummaryResponse struct {
 
 // TokenUsageResponse is the output of token calculation subcommands.
 type TokenUsageResponse struct {
-	InputTokens         int                 `json:"input_tokens"`
-	CacheCreationTokens int                 `json:"cache_creation_tokens"`
-	CacheReadTokens     int                 `json:"cache_read_tokens"`
-	OutputTokens        int                 `json:"output_tokens"`
-	APICallCount        int                 `json:"api_call_count"`
+	InputTokens         int                `json:"input_tokens"`
+	CacheCreationTokens int                `json:"cache_creation_tokens"`
+	CacheReadTokens     int                `json:"cache_read_tokens"`
+	OutputTokens        int                `json:"output_tokens"`
+	APICallCount        int                `json:"api_call_count"`
 	SubagentTokens      *TokenUsageResponse `json:"subagent_tokens,omitempty"`
 }
 

@@ -1,4 +1,4 @@
-package compliancetest
+package runner
 
 import (
 	"bytes"

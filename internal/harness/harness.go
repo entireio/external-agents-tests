@@ -1,4 +1,4 @@
-package compliancetest
+package harness
 
 import (
 	"context"
@@ -6,26 +6,36 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"slices"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/entireio/external-agents-tests/internal/protocol"
+	"github.com/entireio/external-agents-tests/internal/runner"
 )
 
+// Shared state, initialized once per test binary via Init().
 var (
-	binaryPath         string
-	agentInfo          *InfoResponse
-	complianceFixtures *ComplianceFixtures
+	BinaryPath string
+	AgentInfo  *protocol.InfoResponse
+	Fixtures   *ComplianceFixtures
 )
 
+// ComplianceFixtures holds optional fixture data for semantic tests.
 type ComplianceFixtures struct {
 	Detect             *DetectFixtures            `json:"detect,omitempty"`
 	TranscriptAnalyzer *TranscriptAnalyzerFixture `json:"transcript_analyzer,omitempty"`
 }
 
+// DetectFixtures holds paths for detect fixture tests.
 type DetectFixtures struct {
 	PresentRepo string `json:"present_repo,omitempty"`
 	AbsentRepo  string `json:"absent_repo,omitempty"`
 }
 
+// TranscriptAnalyzerFixture holds expected values for transcript analysis tests.
 type TranscriptAnalyzerFixture struct {
 	SessionRef     string   `json:"session_ref"`
 	Offset         int      `json:"offset,omitempty"`
@@ -37,25 +47,28 @@ type TranscriptAnalyzerFixture struct {
 	MissingSession string   `json:"missing_session,omitempty"`
 }
 
-func TestMain(m *testing.M) {
-	binaryPath = os.Getenv("AGENT_BINARY")
-	if binaryPath == "" {
+// Init resolves the agent binary, runs info to discover capabilities,
+// and optionally loads fixtures. Call from each test package's TestMain
+// before m.Run().
+func Init() {
+	BinaryPath = os.Getenv("AGENT_BINARY")
+	if BinaryPath == "" {
 		fmt.Fprintln(os.Stderr, "AGENT_BINARY environment variable is required")
 		os.Exit(1)
 	}
 
-	fi, err := os.Stat(binaryPath)
+	fi, err := os.Stat(BinaryPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cannot stat binary %s: %v\n", binaryPath, err)
+		fmt.Fprintf(os.Stderr, "cannot stat binary %s: %v\n", BinaryPath, err)
 		os.Exit(1)
 	}
 	if fi.IsDir() {
-		fmt.Fprintf(os.Stderr, "%s is a directory, not a binary\n", binaryPath)
+		fmt.Fprintf(os.Stderr, "%s is a directory, not a binary\n", BinaryPath)
 		os.Exit(1)
 	}
 
 	if fixturesPath := os.Getenv("AGENT_FIXTURES"); fixturesPath != "" {
-		path, err := resolveFixturePath(fixturesPath)
+		path, err := ResolveFixturePath(fixturesPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "resolve AGENT_FIXTURES: %v\n", err)
 			os.Exit(1)
@@ -70,7 +83,7 @@ func TestMain(m *testing.M) {
 			fmt.Fprintf(os.Stderr, "parse fixtures file %s: %v\n", path, err)
 			os.Exit(1)
 		}
-		complianceFixtures = &parsed
+		Fixtures = &parsed
 	}
 
 	// Fetch agent info to discover capabilities.
@@ -88,7 +101,7 @@ func TestMain(m *testing.M) {
 	}
 	defer os.RemoveAll(infoEnvRoot)
 
-	r := NewRunnerWithEnvRoot(binaryPath, infoRepoRoot, infoEnvRoot)
+	r := runner.NewRunnerWithEnvRoot(BinaryPath, infoRepoRoot, infoEnvRoot)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	res := r.Run(ctx, nil, "info")
 	cancel()
@@ -98,12 +111,12 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	var parsed InfoResponse
+	var parsed protocol.InfoResponse
 	if err := json.Unmarshal(res.Stdout, &parsed); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing info response: %v\nstdout: %s\n", err, res.Stdout)
 		os.Exit(1)
 	}
-	agentInfo = &parsed
+	AgentInfo = &parsed
 
 	fmt.Printf("Agent: %s (%s) protocol_version=%d\n", parsed.Name, parsed.Type, parsed.ProtocolVersion)
 	fmt.Printf("Capabilities: hooks=%v transcript_analyzer=%v transcript_preparer=%v "+
@@ -116,25 +129,26 @@ func TestMain(m *testing.M) {
 		parsed.Capabilities.HookResponseWriter,
 		parsed.Capabilities.SubagentAwareExtractor,
 	)
-
-	os.Exit(m.Run())
 }
 
 // --- test helpers ---
 
-func testCtx(t *testing.T) context.Context {
+// TestCtx returns a context with a 30-second timeout, cancelled on test cleanup.
+func TestCtx(t *testing.T) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	return ctx
 }
 
-func newTestRunner(t *testing.T) *Runner {
+// NewTestRunner creates a runner with temporary repo and env directories.
+func NewTestRunner(t *testing.T) *runner.Runner {
 	t.Helper()
-	return NewRunnerWithEnvRoot(binaryPath, t.TempDir(), t.TempDir())
+	return runner.NewRunnerWithEnvRoot(BinaryPath, t.TempDir(), t.TempDir())
 }
 
-func requireSuccess(t *testing.T, res *Result) {
+// RequireSuccess fails the test if the result has a non-zero exit code.
+func RequireSuccess(t *testing.T, res *runner.Result) {
 	t.Helper()
 	if res.ExitCode != 0 {
 		t.Fatalf("command failed (exit %d):\nstderr: %s\nstdout: %s",
@@ -142,28 +156,32 @@ func requireSuccess(t *testing.T, res *Result) {
 	}
 }
 
-func requireFailure(t *testing.T, res *Result) {
+// RequireFailure fails the test if the result has a zero exit code.
+func RequireFailure(t *testing.T, res *runner.Result) {
 	t.Helper()
 	if res.ExitCode == 0 {
 		t.Fatalf("expected non-zero exit code, got 0:\nstdout: %s", res.Stdout)
 	}
 }
 
-func requireUnmarshal(t *testing.T, data []byte, v any) {
+// RequireUnmarshal unmarshals JSON data into v, failing the test on error.
+func RequireUnmarshal(t *testing.T, data []byte, v any) {
 	t.Helper()
 	if err := json.Unmarshal(data, v); err != nil {
 		t.Fatalf("invalid JSON: %v\nraw: %s", err, data)
 	}
 }
 
-func requireCapability(t *testing.T, name string, has bool) {
+// RequireCapability skips the test if the agent does not declare the named capability.
+func RequireCapability(t *testing.T, name string, has bool) {
 	t.Helper()
 	if !has {
 		t.Skipf("agent does not declare %q capability", name)
 	}
 }
 
-func mustMarshal(t *testing.T, v any) []byte {
+// MustMarshal marshals v to JSON, failing the test on error.
+func MustMarshal(t *testing.T, v any) []byte {
 	t.Helper()
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -172,27 +190,31 @@ func mustMarshal(t *testing.T, v any) []byte {
 	return data
 }
 
-func hookInput(hookType, sessionID string) HookInputJSON {
-	return HookInputJSON{
+// HookInput returns a HookInputJSON with the given type and session ID.
+func HookInput(hookType, sessionID string) protocol.HookInputJSON {
+	return protocol.HookInputJSON{
 		HookType:  hookType,
 		SessionID: sessionID,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 }
 
-func hookInputWithRef(hookType, sessionID, ref string) HookInputJSON {
-	h := hookInput(hookType, sessionID)
+// HookInputWithRef returns a HookInputJSON with a session ref.
+func HookInputWithRef(hookType, sessionID, ref string) protocol.HookInputJSON {
+	h := HookInput(hookType, sessionID)
 	h.SessionRef = ref
 	return h
 }
 
-func hookInputWithPrompt(hookType, sessionID, prompt string) HookInputJSON {
-	h := hookInput(hookType, sessionID)
+// HookInputWithPrompt returns a HookInputJSON with a user prompt.
+func HookInputWithPrompt(hookType, sessionID, prompt string) protocol.HookInputJSON {
+	h := HookInput(hookType, sessionID)
 	h.UserPrompt = prompt
 	return h
 }
 
-func resolveFixturePath(path string) (string, error) {
+// ResolveFixturePath resolves a potentially relative fixture path.
+func ResolveFixturePath(path string) (string, error) {
 	if filepath.IsAbs(path) {
 		return path, nil
 	}
@@ -201,4 +223,41 @@ func resolveFixturePath(path string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(wd, path), nil
+}
+
+// IntArg converts an int to its string representation for CLI arguments.
+func IntArg(v int) string {
+	return strconv.Itoa(v)
+}
+
+// SameStrings checks if two string slices contain the same elements (order-independent).
+func SameStrings(got, want []string) bool {
+	gotCopy := append([]string(nil), got...)
+	wantCopy := append([]string(nil), want...)
+	sort.Strings(gotCopy)
+	sort.Strings(wantCopy)
+	return slices.Equal(gotCopy, wantCopy)
+}
+
+// RequireNonNegativeTokenUsage fails if any token usage field is negative.
+func RequireNonNegativeTokenUsage(t *testing.T, usage *protocol.TokenUsageResponse) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token usage response must not be nil")
+	}
+	fields := map[string]int{
+		"input_tokens":          usage.InputTokens,
+		"cache_creation_tokens": usage.CacheCreationTokens,
+		"cache_read_tokens":     usage.CacheReadTokens,
+		"output_tokens":         usage.OutputTokens,
+		"api_call_count":        usage.APICallCount,
+	}
+	for name, value := range fields {
+		if value < 0 {
+			t.Errorf("%s must be non-negative, got %d", name, value)
+		}
+	}
+	if usage.SubagentTokens != nil {
+		RequireNonNegativeTokenUsage(t, usage.SubagentTokens)
+	}
 }

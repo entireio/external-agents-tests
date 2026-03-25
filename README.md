@@ -13,6 +13,22 @@ It covers:
 - optional capability tests for hooks, transcript analysis, transcript preparation, token calculation, text generation, hook response writing, and subagent-aware extraction, gated by the agent's declared capabilities
 - optional fixture-driven semantic checks for `detect` and transcript analysis
 
+## Project structure
+
+```
+internal/
+  protocol/       Shared JSON request/response types
+  runner/         Agent binary runner with isolated environment
+  harness/        Shared test setup, helpers, and fixture types
+
+tests/
+  mandatory/      Core protocol tests (info, detect, sessions, chunking, errors)
+  hooks/          Hooks capability tests (install, uninstall, parse)
+  transcript/     Transcript analyzer and preparer tests
+  subagent/       Subagent-aware extractor tests
+  optional/       Smaller capability tests (tokens, text generation, hook writer, detect fixtures)
+```
+
 ## Run locally
 
 Build your external agent binary first, then run:
