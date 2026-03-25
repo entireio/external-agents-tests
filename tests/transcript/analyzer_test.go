@@ -63,6 +63,26 @@ func TestTranscriptAnalyzer_ExtractModifiedFiles(t *testing.T) {
 	}
 }
 
+func TestTranscriptAnalyzer_ExtractModifiedFiles_WithOffset(t *testing.T) {
+	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
+	r := harness.NewTestRunner(t)
+
+	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
+	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	// A non-zero offset past the end of an empty transcript should still succeed.
+	res := r.Run(harness.TestCtx(t), nil, "extract-modified-files", "--path", refPath, "--offset", "999")
+	harness.RequireSuccess(t, res)
+
+	var resp protocol.ExtractFilesResponse
+	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	if len(resp.Files) != 0 {
+		t.Errorf("expected no files when offset exceeds transcript length, got %v", resp.Files)
+	}
+}
+
 func TestTranscriptAnalyzer_ExtractPrompts(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
@@ -78,6 +98,26 @@ func TestTranscriptAnalyzer_ExtractPrompts(t *testing.T) {
 	var resp protocol.ExtractPromptsResponse
 	harness.RequireUnmarshal(t, res.Stdout, &resp)
 	// Empty prompts array is valid for an empty/minimal transcript.
+}
+
+func TestTranscriptAnalyzer_ExtractPrompts_WithOffset(t *testing.T) {
+	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
+	r := harness.NewTestRunner(t)
+
+	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
+	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+
+	// A non-zero offset past the end of an empty transcript should still succeed.
+	res := r.Run(harness.TestCtx(t), nil, "extract-prompts", "--session-ref", refPath, "--offset", "999")
+	harness.RequireSuccess(t, res)
+
+	var resp protocol.ExtractPromptsResponse
+	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	if len(resp.Prompts) != 0 {
+		t.Errorf("expected no prompts when offset exceeds transcript length, got %v", resp.Prompts)
+	}
 }
 
 func TestTranscriptAnalyzer_ExtractSummary(t *testing.T) {

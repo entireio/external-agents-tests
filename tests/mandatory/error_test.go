@@ -40,6 +40,9 @@ func TestUnknownSubcommand(t *testing.T) {
 	r := harness.NewTestRunner(t)
 	res := r.Run(harness.TestCtx(t), nil, "this-subcommand-does-not-exist")
 	harness.RequireFailure(t, res)
+	if len(res.Stderr) == 0 {
+		t.Error("unknown subcommand should produce diagnostic output on stderr")
+	}
 }
 
 func TestNoSubcommand(t *testing.T) {

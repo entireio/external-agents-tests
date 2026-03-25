@@ -28,6 +28,12 @@ func TestInfo(t *testing.T) {
 	if info.Description == "" {
 		t.Error("description must not be empty")
 	}
+	if info.Capabilities.Hooks && len(info.HookNames) == 0 {
+		t.Error("agent declares hooks capability but hook_names is empty")
+	}
+	if !info.Capabilities.Hooks && len(info.HookNames) > 0 {
+		t.Errorf("agent does not declare hooks capability but hook_names has %d entries", len(info.HookNames))
+	}
 }
 
 func TestDetect(t *testing.T) {
@@ -87,6 +93,9 @@ func TestResolveSessionFile(t *testing.T) {
 	harness.RequireUnmarshal(t, res.Stdout, &resp)
 	if resp.SessionFile == "" {
 		t.Error("session_file must not be empty")
+	}
+	if !strings.Contains(resp.SessionFile, "test-session-123") {
+		t.Errorf("session_file %q should contain the session-id %q", resp.SessionFile, "test-session-123")
 	}
 }
 

@@ -19,8 +19,8 @@ func TestHooks_InstallAndUninstall(t *testing.T) {
 	harness.RequireSuccess(t, res)
 	var installed protocol.HooksInstalledResponse
 	harness.RequireUnmarshal(t, res.Stdout, &installed)
-	if installed.HooksInstalled < 0 {
-		t.Errorf("hooks_installed must be non-negative, got %d", installed.HooksInstalled)
+	if installed.HooksInstalled <= 0 {
+		t.Errorf("first install must install at least one hook, got %d", installed.HooksInstalled)
 	}
 
 	// Verify status reflects what was installed.
@@ -43,6 +43,19 @@ func TestHooks_InstallAndUninstall(t *testing.T) {
 	harness.RequireUnmarshal(t, res.Stdout, &after)
 	if after.Installed {
 		t.Error("expected installed=false after uninstall-hooks")
+	}
+}
+
+func TestHooks_AreHooksInstalledBeforeInstall(t *testing.T) {
+	harness.RequireCapability(t, "hooks", harness.AgentInfo.Capabilities.Hooks)
+	r := harness.NewTestRunner(t)
+
+	res := r.Run(harness.TestCtx(t), nil, "are-hooks-installed")
+	harness.RequireSuccess(t, res)
+	var resp protocol.AreHooksInstalledResponse
+	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	if resp.Installed {
+		t.Error("expected installed=false in a fresh environment before install-hooks")
 	}
 }
 
