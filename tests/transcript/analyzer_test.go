@@ -1,8 +1,6 @@
 package transcript_test
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -13,17 +11,10 @@ import (
 func TestTranscriptAnalyzer_Position(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
-
-	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
-	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
-		t.Fatalf("writing fixture: %v", err)
-	}
-
-	res := r.Run(harness.TestCtx(t), nil, "get-transcript-position", "--path", refPath)
-	harness.RequireSuccess(t, res)
+	refPath := harness.WriteFixture(t, r.RepoRoot(), "test-transcript.json", []byte(`{}`))
 
 	var resp protocol.TranscriptPositionResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "get-transcript-position", "--path", refPath)
 	if resp.Position < 0 {
 		t.Errorf("position must be non-negative, got %d", resp.Position)
 	}
@@ -33,12 +24,9 @@ func TestTranscriptAnalyzer_PositionMissingFile(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
 
-	res := r.Run(harness.TestCtx(t), nil, "get-transcript-position",
-		"--path", filepath.Join(r.RepoRoot(), "nonexistent.json"))
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.TranscriptPositionResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "get-transcript-position",
+		"--path", r.RepoRoot()+"/nonexistent.json")
 	if resp.Position != 0 {
 		t.Errorf("position for missing file: got %d, want 0", resp.Position)
 	}
@@ -47,17 +35,10 @@ func TestTranscriptAnalyzer_PositionMissingFile(t *testing.T) {
 func TestTranscriptAnalyzer_ExtractModifiedFiles(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
-
-	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
-	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
-		t.Fatalf("writing fixture: %v", err)
-	}
-
-	res := r.Run(harness.TestCtx(t), nil, "extract-modified-files", "--path", refPath, "--offset", "0")
-	harness.RequireSuccess(t, res)
+	refPath := harness.WriteFixture(t, r.RepoRoot(), "test-transcript.json", []byte(`{}`))
 
 	var resp protocol.ExtractFilesResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "extract-modified-files", "--path", refPath, "--offset", "0")
 	if resp.CurrentPosition < 0 {
 		t.Errorf("current_position must be non-negative, got %d", resp.CurrentPosition)
 	}
@@ -66,18 +47,11 @@ func TestTranscriptAnalyzer_ExtractModifiedFiles(t *testing.T) {
 func TestTranscriptAnalyzer_ExtractModifiedFiles_WithOffset(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
-
-	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
-	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
-		t.Fatalf("writing fixture: %v", err)
-	}
+	refPath := harness.WriteFixture(t, r.RepoRoot(), "test-transcript.json", []byte(`{}`))
 
 	// A non-zero offset past the end of an empty transcript should still succeed.
-	res := r.Run(harness.TestCtx(t), nil, "extract-modified-files", "--path", refPath, "--offset", "999")
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.ExtractFilesResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "extract-modified-files", "--path", refPath, "--offset", "999")
 	if len(resp.Files) != 0 {
 		t.Errorf("expected no files when offset exceeds transcript length, got %v", resp.Files)
 	}
@@ -86,35 +60,21 @@ func TestTranscriptAnalyzer_ExtractModifiedFiles_WithOffset(t *testing.T) {
 func TestTranscriptAnalyzer_ExtractPrompts(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
-
-	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
-	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
-		t.Fatalf("writing fixture: %v", err)
-	}
-
-	res := r.Run(harness.TestCtx(t), nil, "extract-prompts", "--session-ref", refPath, "--offset", "0")
-	harness.RequireSuccess(t, res)
+	refPath := harness.WriteFixture(t, r.RepoRoot(), "test-transcript.json", []byte(`{}`))
 
 	var resp protocol.ExtractPromptsResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "extract-prompts", "--session-ref", refPath, "--offset", "0")
 	// Empty prompts array is valid for an empty/minimal transcript.
 }
 
 func TestTranscriptAnalyzer_ExtractPrompts_WithOffset(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
-
-	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
-	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
-		t.Fatalf("writing fixture: %v", err)
-	}
+	refPath := harness.WriteFixture(t, r.RepoRoot(), "test-transcript.json", []byte(`{}`))
 
 	// A non-zero offset past the end of an empty transcript should still succeed.
-	res := r.Run(harness.TestCtx(t), nil, "extract-prompts", "--session-ref", refPath, "--offset", "999")
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.ExtractPromptsResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "extract-prompts", "--session-ref", refPath, "--offset", "999")
 	if len(resp.Prompts) != 0 {
 		t.Errorf("expected no prompts when offset exceeds transcript length, got %v", resp.Prompts)
 	}
@@ -123,17 +83,10 @@ func TestTranscriptAnalyzer_ExtractPrompts_WithOffset(t *testing.T) {
 func TestTranscriptAnalyzer_ExtractSummary(t *testing.T) {
 	harness.RequireCapability(t, "transcript_analyzer", harness.AgentInfo.Capabilities.TranscriptAnalyzer)
 	r := harness.NewTestRunner(t)
-
-	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
-	if err := os.WriteFile(refPath, []byte(`{}`), 0o644); err != nil {
-		t.Fatalf("writing fixture: %v", err)
-	}
-
-	res := r.Run(harness.TestCtx(t), nil, "extract-summary", "--session-ref", refPath)
-	harness.RequireSuccess(t, res)
+	refPath := harness.WriteFixture(t, r.RepoRoot(), "test-transcript.json", []byte(`{}`))
 
 	var resp protocol.ExtractSummaryResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "extract-summary", "--session-ref", refPath)
 	// has_summary=false is expected for an empty/minimal transcript.
 }
 
@@ -153,44 +106,32 @@ func TestTranscriptAnalyzer_SemanticFixture(t *testing.T) {
 	ctx := harness.TestCtx(t)
 
 	if fixture.Position != nil {
-		res := r.Run(ctx, nil, "get-transcript-position", "--path", path)
-		harness.RequireSuccess(t, res)
-
 		var resp protocol.TranscriptPositionResponse
-		harness.RequireUnmarshal(t, res.Stdout, &resp)
+		harness.RunAndUnmarshal(t, r, ctx, &resp, nil, "get-transcript-position", "--path", path)
 		if resp.Position != *fixture.Position {
 			t.Errorf("position: got %d, want %d", resp.Position, *fixture.Position)
 		}
 	}
 
 	if fixture.ModifiedFiles != nil {
-		res := r.Run(ctx, nil, "extract-modified-files", "--path", path, "--offset", harness.IntArg(fixture.Offset))
-		harness.RequireSuccess(t, res)
-
 		var resp protocol.ExtractFilesResponse
-		harness.RequireUnmarshal(t, res.Stdout, &resp)
+		harness.RunAndUnmarshal(t, r, ctx, &resp, nil, "extract-modified-files", "--path", path, "--offset", harness.IntArg(fixture.Offset))
 		if !harness.SameStrings(resp.Files, fixture.ModifiedFiles) {
 			t.Errorf("modified_files: got %v, want %v", resp.Files, fixture.ModifiedFiles)
 		}
 	}
 
 	if fixture.Prompts != nil {
-		res := r.Run(ctx, nil, "extract-prompts", "--session-ref", path, "--offset", harness.IntArg(fixture.Offset))
-		harness.RequireSuccess(t, res)
-
 		var resp protocol.ExtractPromptsResponse
-		harness.RequireUnmarshal(t, res.Stdout, &resp)
+		harness.RunAndUnmarshal(t, r, ctx, &resp, nil, "extract-prompts", "--session-ref", path, "--offset", harness.IntArg(fixture.Offset))
 		if !slices.Equal(resp.Prompts, fixture.Prompts) {
 			t.Errorf("prompts: got %v, want %v", resp.Prompts, fixture.Prompts)
 		}
 	}
 
 	if fixture.HasSummary != nil {
-		res := r.Run(ctx, nil, "extract-summary", "--session-ref", path)
-		harness.RequireSuccess(t, res)
-
 		var resp protocol.ExtractSummaryResponse
-		harness.RequireUnmarshal(t, res.Stdout, &resp)
+		harness.RunAndUnmarshal(t, r, ctx, &resp, nil, "extract-summary", "--session-ref", path)
 		if resp.HasSummary != *fixture.HasSummary {
 			t.Errorf("has_summary: got %v, want %v", resp.HasSummary, *fixture.HasSummary)
 		}

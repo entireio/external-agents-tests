@@ -239,6 +239,24 @@ func SameStrings(got, want []string) bool {
 	return slices.Equal(gotCopy, wantCopy)
 }
 
+// RunAndUnmarshal runs a subcommand, requires success, and unmarshals stdout into v.
+func RunAndUnmarshal(t *testing.T, r *runner.Runner, ctx context.Context, v any, input []byte, args ...string) {
+	t.Helper()
+	res := r.Run(ctx, input, args...)
+	RequireSuccess(t, res)
+	RequireUnmarshal(t, res.Stdout, v)
+}
+
+// WriteFixture writes content to a file in dir and returns the full path.
+func WriteFixture(t *testing.T, dir, name string, content []byte) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, content, 0o644); err != nil {
+		t.Fatalf("writing fixture %s: %v", name, err)
+	}
+	return p
+}
+
 // RequireNonNegativeTokenUsage fails if any token usage field is negative.
 func RequireNonNegativeTokenUsage(t *testing.T, usage *protocol.TokenUsageResponse) {
 	t.Helper()

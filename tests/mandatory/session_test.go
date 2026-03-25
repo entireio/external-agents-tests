@@ -15,18 +15,14 @@ func TestWriteAndReadSession(t *testing.T) {
 	ctx := harness.TestCtx(t)
 
 	// Ask the agent where it stores sessions.
-	res := r.Run(ctx, nil, "get-session-dir", "--repo-path", r.RepoRoot())
-	harness.RequireSuccess(t, res)
 	var dirResp protocol.SessionDirResponse
-	harness.RequireUnmarshal(t, res.Stdout, &dirResp)
+	harness.RunAndUnmarshal(t, r, ctx, &dirResp, nil, "get-session-dir", "--repo-path", r.RepoRoot())
 
 	sessionID := "test-roundtrip-session"
-	res = r.Run(ctx, nil, "resolve-session-file",
+	var fileResp protocol.SessionFileResponse
+	harness.RunAndUnmarshal(t, r, ctx, &fileResp, nil, "resolve-session-file",
 		"--session-dir", dirResp.SessionDir,
 		"--session-id", sessionID)
-	harness.RequireSuccess(t, res)
-	var fileResp protocol.SessionFileResponse
-	harness.RequireUnmarshal(t, res.Stdout, &fileResp)
 
 	// Ensure parent directories exist.
 	if err := os.MkdirAll(filepath.Dir(fileResp.SessionFile), 0o755); err != nil {
@@ -45,16 +41,13 @@ func TestWriteAndReadSession(t *testing.T) {
 		NewFiles:      []string{"file3.go"},
 		DeletedFiles:  []string{},
 	}
-	res = r.Run(ctx, harness.MustMarshal(t, session), "write-session")
+	res := r.Run(ctx, harness.MustMarshal(t, session), "write-session")
 	harness.RequireSuccess(t, res)
 
 	// Read it back.
 	input := harness.HookInputWithRef("agent-spawn", sessionID, fileResp.SessionFile)
-	res = r.Run(ctx, harness.MustMarshal(t, input), "read-session")
-	harness.RequireSuccess(t, res)
-
 	var readBack protocol.AgentSessionJSON
-	harness.RequireUnmarshal(t, res.Stdout, &readBack)
+	harness.RunAndUnmarshal(t, r, ctx, &readBack, harness.MustMarshal(t, input), "read-session")
 
 	if readBack.SessionID != sessionID {
 		t.Errorf("session_id: got %q, want %q", readBack.SessionID, sessionID)
@@ -87,11 +80,7 @@ func TestWriteAndReadSession(t *testing.T) {
 
 func TestReadTranscript(t *testing.T) {
 	r := harness.NewTestRunner(t)
-
-	refPath := filepath.Join(r.RepoRoot(), "test-transcript.json")
-	if err := os.WriteFile(refPath, []byte(`{"test": "data"}`), 0o644); err != nil {
-		t.Fatalf("writing test file: %v", err)
-	}
+	refPath := harness.WriteFixture(t, r.RepoRoot(), "test-transcript.json", []byte(`{"test": "data"}`))
 
 	res := r.Run(harness.TestCtx(t), nil, "read-transcript", "--session-ref", refPath)
 	// The agent may fail if it expects a specific transcript format.

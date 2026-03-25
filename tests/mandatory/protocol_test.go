@@ -10,11 +10,8 @@ import (
 
 func TestInfo(t *testing.T) {
 	r := harness.NewTestRunner(t)
-	res := r.Run(harness.TestCtx(t), nil, "info")
-	harness.RequireSuccess(t, res)
-
 	var info protocol.InfoResponse
-	harness.RequireUnmarshal(t, res.Stdout, &info)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &info, nil, "info")
 
 	if info.ProtocolVersion != 1 {
 		t.Errorf("protocol_version: got %d, want 1", info.ProtocolVersion)
@@ -38,22 +35,16 @@ func TestInfo(t *testing.T) {
 
 func TestDetect(t *testing.T) {
 	r := harness.NewTestRunner(t)
-	res := r.Run(harness.TestCtx(t), nil, "detect")
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.DetectResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "detect")
 	// present can be true or false depending on the environment.
 }
 
 func TestGetSessionID(t *testing.T) {
 	r := harness.NewTestRunner(t)
 	input := harness.HookInput("agent-spawn", "test-session-abc")
-	res := r.Run(harness.TestCtx(t), harness.MustMarshal(t, input), "get-session-id")
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.SessionIDResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, harness.MustMarshal(t, input), "get-session-id")
 	if resp.SessionID == "" {
 		t.Error("session_id must not be empty")
 	}
@@ -62,21 +53,15 @@ func TestGetSessionID(t *testing.T) {
 func TestGetSessionID_EmptyInput(t *testing.T) {
 	r := harness.NewTestRunner(t)
 	input := harness.HookInput("agent-spawn", "")
-	res := r.Run(harness.TestCtx(t), harness.MustMarshal(t, input), "get-session-id")
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.SessionIDResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, harness.MustMarshal(t, input), "get-session-id")
 	// Agent may echo the empty ID or generate one; both are valid.
 }
 
 func TestGetSessionDir(t *testing.T) {
 	r := harness.NewTestRunner(t)
-	res := r.Run(harness.TestCtx(t), nil, "get-session-dir", "--repo-path", r.RepoRoot())
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.SessionDirResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "get-session-dir", "--repo-path", r.RepoRoot())
 	if resp.SessionDir == "" {
 		t.Error("session_dir must not be empty")
 	}
@@ -84,13 +69,10 @@ func TestGetSessionDir(t *testing.T) {
 
 func TestResolveSessionFile(t *testing.T) {
 	r := harness.NewTestRunner(t)
-	res := r.Run(harness.TestCtx(t), nil, "resolve-session-file",
+	var resp protocol.SessionFileResponse
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "resolve-session-file",
 		"--session-dir", r.RepoRoot(),
 		"--session-id", "test-session-123")
-	harness.RequireSuccess(t, res)
-
-	var resp protocol.SessionFileResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
 	if resp.SessionFile == "" {
 		t.Error("session_file must not be empty")
 	}
@@ -101,11 +83,8 @@ func TestResolveSessionFile(t *testing.T) {
 
 func TestFormatResumeCommand(t *testing.T) {
 	r := harness.NewTestRunner(t)
-	res := r.Run(harness.TestCtx(t), nil, "format-resume-command", "--session-id", "test-session-123")
-	harness.RequireSuccess(t, res)
-
 	var resp protocol.ResumeCommandResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "format-resume-command", "--session-id", "test-session-123")
 	if resp.Command == "" {
 		t.Error("command must not be empty")
 	}
@@ -118,18 +97,15 @@ func TestChunkAndReassembleTranscript(t *testing.T) {
 	// Create content larger than chunk size to force multiple chunks.
 	original := []byte(strings.Repeat("The quick brown fox jumps over the lazy dog.\n", 100))
 
-	res := r.Run(ctx, original, "chunk-transcript", "--max-size", "512")
-	harness.RequireSuccess(t, res)
-
 	var chunks protocol.ChunkResponse
-	harness.RequireUnmarshal(t, res.Stdout, &chunks)
+	harness.RunAndUnmarshal(t, r, ctx, &chunks, original, "chunk-transcript", "--max-size", "512")
 	if len(chunks.Chunks) < 2 {
 		t.Errorf("expected multiple chunks for %d bytes with max-size 512, got %d chunks",
 			len(original), len(chunks.Chunks))
 	}
 
 	// Reassemble and verify round-trip.
-	res = r.Run(ctx, harness.MustMarshal(t, chunks), "reassemble-transcript")
+	res := r.Run(ctx, harness.MustMarshal(t, chunks), "reassemble-transcript")
 	harness.RequireSuccess(t, res)
 
 	if string(res.Stdout) != string(original) {
@@ -140,13 +116,8 @@ func TestChunkAndReassembleTranscript(t *testing.T) {
 
 func TestChunkTranscript_SingleChunk(t *testing.T) {
 	r := harness.NewTestRunner(t)
-
-	small := []byte("small content")
-	res := r.Run(harness.TestCtx(t), small, "chunk-transcript", "--max-size", "1048576")
-	harness.RequireSuccess(t, res)
-
 	var chunks protocol.ChunkResponse
-	harness.RequireUnmarshal(t, res.Stdout, &chunks)
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &chunks, []byte("small content"), "chunk-transcript", "--max-size", "1048576")
 	if len(chunks.Chunks) != 1 {
 		t.Errorf("expected 1 chunk for small content, got %d", len(chunks.Chunks))
 	}

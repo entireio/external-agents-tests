@@ -17,13 +17,10 @@ func TestSubagentAwareExtractor_ExtractAllModifiedFiles(t *testing.T) {
 		t.Fatalf("creating subagents dir: %v", err)
 	}
 
-	res := r.Run(harness.TestCtx(t), []byte(`{}`), "extract-all-modified-files",
+	var resp protocol.ExtractFilesResponse
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, []byte(`{}`), "extract-all-modified-files",
 		"--offset", "0",
 		"--subagents-dir", subagentsDir)
-	harness.RequireSuccess(t, res)
-
-	var resp protocol.ExtractFilesResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
 }
 
 func TestSubagentAwareExtractor_CalculateTotalTokens(t *testing.T) {
@@ -34,12 +31,9 @@ func TestSubagentAwareExtractor_CalculateTotalTokens(t *testing.T) {
 		t.Fatalf("creating subagents dir: %v", err)
 	}
 
-	res := r.Run(harness.TestCtx(t), []byte(`{}`), "calculate-total-tokens",
+	var resp protocol.TokenUsageResponse
+	harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, []byte(`{}`), "calculate-total-tokens",
 		"--offset", "0",
 		"--subagents-dir", subagentsDir)
-	harness.RequireSuccess(t, res)
-
-	var resp protocol.TokenUsageResponse
-	harness.RequireUnmarshal(t, res.Stdout, &resp)
 	harness.RequireNonNegativeTokenUsage(t, &resp)
 }

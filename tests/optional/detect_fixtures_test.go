@@ -42,11 +42,8 @@ func TestDetect_WithFixtures(t *testing.T) {
 			}
 
 			r := runner.NewRunnerWithEnvRoot(harness.BinaryPath, path, t.TempDir())
-			res := r.Run(harness.TestCtx(t), nil, "detect")
-			harness.RequireSuccess(t, res)
-
 			var resp protocol.DetectResponse
-			harness.RequireUnmarshal(t, res.Stdout, &resp)
+			harness.RunAndUnmarshal(t, r, harness.TestCtx(t), &resp, nil, "detect")
 			if resp.Present != tt.want {
 				t.Errorf("present: got %v, want %v", resp.Present, tt.want)
 			}
