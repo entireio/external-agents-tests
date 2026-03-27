@@ -1,12 +1,20 @@
 package mandatory_test
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/entireio/external-agents-tests/internal/harness"
 	"github.com/entireio/external-agents-tests/internal/protocol"
 )
+
+func TestBinaryName(t *testing.T) {
+	name := filepath.Base(harness.BinaryPath)
+	if !strings.HasPrefix(name, "entire-agent-") {
+		t.Errorf("binary name %q must start with \"entire-agent-\"", name)
+	}
+}
 
 func TestInfo(t *testing.T) {
 	r := harness.NewTestRunner(t)

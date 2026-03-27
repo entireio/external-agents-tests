@@ -20,6 +20,10 @@ runs:
       with:
         go-version: ${{ inputs.go-version }}
         cache: false
+    - name: Build test CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: go build -o external-agents-tests .
     - name: Run protocol compliance tests
       shell: bash
       working-directory: ${{ github.action_path }}
@@ -28,12 +32,12 @@ runs:
         if [[ ! "$BINARY" = /* ]]; then
           BINARY="${GITHUB_WORKSPACE}/${BINARY}"
         fi
-        if [[ ! -x "$BINARY" ]]; then
-          echo "::error::Binary not found or not executable: ${BINARY}"
-          exit 1
-        fi
         FIXTURES="${{ inputs.fixtures-path }}"
-        if [[ -n "$FIXTURES" && ! "$FIXTURES" = /* ]]; then
-          FIXTURES="${GITHUB_WORKSPACE}/${FIXTURES}"
+        ARGS=("verify" "$BINARY")
+        if [[ -n "$FIXTURES" ]]; then
+          if [[ ! "$FIXTURES" = /* ]]; then
+            FIXTURES="${GITHUB_WORKSPACE}/${FIXTURES}"
+          fi
+          ARGS+=("--fixtures" "$FIXTURES")
         fi
-        AGENT_BINARY="${BINARY}" AGENT_FIXTURES="${FIXTURES}" go test -v -count=1 -timeout=5m ./...
+        ./external-agents-tests "${ARGS[@]}"
